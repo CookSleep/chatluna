@@ -39,6 +39,7 @@ import {
     createChatGenerationParams,
     getUsage,
     isChatResponse,
+    isMediaProcessingPart,
     partAsType,
     partAsTypeCheck,
     prepareModelConfig
@@ -552,6 +553,8 @@ export class GeminiRequester
         let functionIndex = 0
 
         for await (const chunk of iterable) {
+            if (isMediaProcessingPart(chunk)) continue
+
             let parsedChunk: ChatUsageMetadataPart | undefined
             if (
                 (parsedChunk = partAsTypeCheck<ChatUsageMetadataPart>(
@@ -602,9 +605,9 @@ export class GeminiRequester
                 if (
                     updatedContent ||
                     updatedToolCalling ||
-                    (chunk['thoughtSignature'] != null &&
-                        chunk['toolCall'] == null &&
-                        chunk['toolResponse'] == null) ||
+                    chunk['thoughtSignature'] != null ||
+                    chunk['toolCall'] != null ||
+                    chunk['toolResponse'] != null ||
                     chunk['executableCode'] != null ||
                     chunk['codeExecutionResult'] != null
                 ) {
@@ -773,15 +776,13 @@ export class GeminiRequester
         const sig = chunk['thoughtSignature']
         let thoughtData: Record<string, unknown> | undefined
         if (
+            chunk['toolCall'] != null ||
+            chunk['toolResponse'] != null ||
             chunk['executableCode'] != null ||
             chunk['codeExecutionResult'] != null
         ) {
             thoughtData = { parts: [chunk] }
-        } else if (
-            sig != null &&
-            chunk['toolCall'] == null &&
-            chunk['toolResponse'] == null
-        ) {
+        } else if (sig != null) {
             const id = functionCall?.id ?? chunk['functionCall']?.id
             if (id != null) {
                 thoughtData = {

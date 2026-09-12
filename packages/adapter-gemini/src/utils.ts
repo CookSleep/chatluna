@@ -181,12 +181,24 @@ function parseJsonArgs(args: string): Record<string, unknown> {
     }
 }
 
+export function isMediaProcessingPart(part: ChatPart): boolean {
+    const tool = part['toolCall'] ?? part['toolResponse']
+    // Agentic media steps can omit toolType and cannot be replayed by Gemini.
+    return (
+        tool != null &&
+        (tool.toolType == null || tool.toolType === 'MEDIA_PROCESSING')
+    )
+}
+
 function isContextPart(part: any): part is ChatPart {
-    // Gemini rejects replayed Agentic media tool steps.
     return (
         typeof part === 'object' &&
         part != null &&
-        (part['executableCode'] != null || part['codeExecutionResult'] != null)
+        !isMediaProcessingPart(part) &&
+        (part['toolCall'] != null ||
+            part['toolResponse'] != null ||
+            part['executableCode'] != null ||
+            part['codeExecutionResult'] != null)
     )
 }
 
