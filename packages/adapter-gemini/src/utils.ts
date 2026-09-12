@@ -209,57 +209,55 @@ function getContextParts(data: Record<string, any>, id?: string) {
     return (Array.isArray(raw) ? raw.flat() : [raw]).filter(isContextPart)
 }
 
+function processFunctionCalls(
+    message: AIMessage,
+    removeId: boolean
+): ChatCompletionResponseMessage {
+    const thoughtData: Record<string, any> =
+        message.additional_kwargs['thought_data'] ?? {}
+    const parts: ChatPart[] = getContextParts(
+        Object.fromEntries(
+            Object.entries(thoughtData).filter(
+                ([id]) => !message.tool_calls.some((call) => call.id === id)
+            )
+        )
+    )
+
+    for (const toolCall of message.tool_calls) {
+        if (toolCall.id != null) {
+            parts.push(...getContextParts(thoughtData, toolCall.id))
+        }
+
+        const functionCall: ChatFunctionCallingPart['functionCall'] = {
+            name: toolCall.name,
+            args: toolCall.args
+        }
+        if (!removeId || toolCall.id) {
+            functionCall.id = toolCall.id
+        }
+        const data = thoughtData[toolCall.id] ?? thoughtData
+        const sig = Array.isArray(data)
+            ? data.find((item) => typeof item?.thoughtSignature === 'string')
+                  ?.thoughtSignature
+            : data.thoughtSignature
+
+        parts.push({
+            functionCall,
+            ...(typeof sig === 'string' ? { thoughtSignature: sig } : {})
+        })
+    }
+
+    return { role: 'model', parts }
+}
+
 async function processFunctionMessage(
     plugin: ChatLunaPlugin<ClientConfig, Config>,
     message: AIMessage | ToolMessage,
     removeId: boolean,
     agentic: boolean
 ): Promise<ChatCompletionResponseMessage> {
-    const thoughtData: Record<string, any> =
-        message.additional_kwargs['thought_data'] ?? {}
-
     if (message['tool_calls']) {
-        message = message as AIMessage
-        const toolCalls = message.tool_calls
-        const parts: ChatPart[] = getContextParts(
-            Object.fromEntries(
-                Object.entries(thoughtData).filter(
-                    ([id]) => !toolCalls.some((call) => call.id === id)
-                )
-            )
-        )
-
-        for (const toolCall of toolCalls) {
-            // tool context: replay context tied to this tool call first.
-            if (toolCall.id != null) {
-                parts.push(...getContextParts(thoughtData, toolCall.id))
-            }
-
-            const functionCall: ChatFunctionCallingPart['functionCall'] = {
-                name: toolCall.name,
-                args: toolCall.args
-            }
-            if (!removeId || toolCall.id) {
-                functionCall.id = toolCall.id
-            }
-            const data = thoughtData[toolCall.id] ?? thoughtData
-            const sig = Array.isArray(data)
-                ? data.find(
-                      (item) => typeof item?.thoughtSignature === 'string'
-                  )?.thoughtSignature
-                : data.thoughtSignature
-
-            // tool calls: reattach custom tool calls with their thought signatures.
-            parts.push({
-                functionCall,
-                ...(typeof sig === 'string' ? { thoughtSignature: sig } : {})
-            })
-        }
-
-        return {
-            role: 'model',
-            parts
-        }
+        return processFunctionCalls(message as AIMessage, removeId)
     }
 
     const finalMessage = message as ToolMessage
