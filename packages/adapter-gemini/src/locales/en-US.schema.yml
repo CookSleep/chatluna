@@ -33,6 +33,7 @@ $inner:
       thinkingBudget: 'Thinking budget (-1-24576). (0: dynamic thinking) Higher: more tokens spent on thinking. Currently only supports `gemini-2.5` series models.'
       groundingContentDisplay: 'Enable display of search results'
       imageGeneration: 'Enable image generation (only for `gemini-*-image-*` and `gemini-2.5-flash-image-preview` model)'
+      agenticVideoUnderstanding: 'Enable agentic video understanding for video inputs. The model selectively explores video and audio in segments and can increase the sampling frame rate for fast-moving scenes as needed. This reduces long-video input costs and improves understanding of specific details, but may reduce global understanding of shorter videos and increase response latency. Currently supported by `gemini-3.5-flash-lite` `gemini-3.6-flash` `gemini-3.7-flash` and `gemini-3.8-flash`.'
       imageModelSearch: 'Enable search for image generation models. When enabled, supported image models will generate additional variants with a `-search` suffix (e.g. `gemini-3-pro-image-search`).'
       includeThoughts: 'Enable retrieval of model thoughts'
       codeExecution: 'Enable code execution tool'

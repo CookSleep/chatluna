@@ -60,6 +60,7 @@ export type ChatInlineDataPart = {
         displayName?: string
         data?: string
     }
+    mediaProcessing?: 'AGENTIC'
 }
 
 export type ChatUploadDataPart = {
@@ -67,6 +68,7 @@ export type ChatUploadDataPart = {
         mime_type: string
         data?: string
     }
+    media_processing?: 'AGENTIC'
 }
 
 export type ChatFunctionCallingPart = {
@@ -82,7 +84,13 @@ export type ChatFunctionResponsePart = {
     functionResponse: {
         name: string
         response: Record<string, unknown>
-        parts?: (ChatInlineDataPart | ChatUploadDataPart)[]
+        parts?: ((
+            | Pick<ChatInlineDataPart, 'inlineData'>
+            | Pick<ChatUploadDataPart, 'inline_data'>
+        ) & {
+            mediaProcessing?: never
+            media_processing?: never
+        })[]
         id?: string
     }
 }

@@ -602,7 +602,11 @@ export class GeminiRequester
                 if (
                     updatedContent ||
                     updatedToolCalling ||
-                    chunk['thoughtSignature'] != null
+                    chunk['thoughtSignature'] != null ||
+                    chunk['toolCall'] != null ||
+                    chunk['toolResponse'] != null ||
+                    chunk['executableCode'] != null ||
+                    chunk['codeExecutionResult'] != null
                 ) {
                     const messageChunk = this._createMessageChunk(
                         updatedContent,
@@ -768,7 +772,14 @@ export class GeminiRequester
         })
         const sig = chunk['thoughtSignature']
         let thoughtData: Record<string, unknown> | undefined
-        if (sig != null) {
+        if (
+            chunk['toolCall'] != null ||
+            chunk['toolResponse'] != null ||
+            chunk['executableCode'] != null ||
+            chunk['codeExecutionResult'] != null
+        ) {
+            thoughtData = { parts: [chunk] }
+        } else if (sig != null) {
             const id = functionCall?.id ?? chunk['functionCall']?.id
             if (id != null) {
                 thoughtData = {
@@ -777,23 +788,7 @@ export class GeminiRequester
                     }
                 }
             } else {
-                const part = {
-                    thoughtSignature: sig,
-                    toolCall: chunk['toolCall'],
-                    toolResponse: chunk['toolResponse'],
-                    executableCode: chunk['executableCode'],
-                    codeExecutionResult: chunk['codeExecutionResult']
-                }
-                const contextId =
-                    chunk['toolCall']?.id ??
-                    chunk['toolResponse']?.id ??
-                    chunk['executableCode']?.id ??
-                    chunk['codeExecutionResult']?.id
-
-                thoughtData =
-                    contextId != null
-                        ? { [contextId]: [part] }
-                        : { parts: [part] }
+                thoughtData = { parts: [{ thoughtSignature: sig }] }
             }
         }
 

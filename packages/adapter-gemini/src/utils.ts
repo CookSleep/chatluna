@@ -41,6 +41,17 @@ export async function langchainMessageToGeminiMessage(
     plugin: ChatLunaPlugin<ClientConfig, Config>,
     model?: string
 ): Promise<ChatCompletionResponseMessage[]> {
+    const match = model?.match(
+        /gemini[-_\s]*(\d+)(?:[._](\d+))?[-_\s]*flash(?:[-_\s]*(lite))?/i
+    )
+    // Accept provider prefixes/suffixes and future Flash versions.
+    const agentic =
+        plugin.config.agenticVideoUnderstanding &&
+        match != null &&
+        (Number(match[1]) > 3 ||
+            (Number(match[1]) === 3 &&
+                (Number(match[2]) >= 6 ||
+                    (Number(match[2]) === 5 && match[3] != null))))
     const result: ChatCompletionResponseMessage[] = []
     for (let i = 0; i < messages.length; i++) {
         const message = messages[i]
@@ -60,7 +71,8 @@ export async function langchainMessageToGeminiMessage(
                         await processFunctionMessage(
                             plugin,
                             msg,
-                            plugin.config.useCamelCaseSystemInstruction
+                            plugin.config.useCamelCaseSystemInstruction,
+                            agentic
                         )
                     ).parts
                 )
@@ -76,7 +88,8 @@ export async function langchainMessageToGeminiMessage(
                 await processFunctionMessage(
                     plugin,
                     message,
-                    plugin.config.useCamelCaseSystemInstruction
+                    plugin.config.useCamelCaseSystemInstruction,
+                    agentic
                 )
             )
             continue
@@ -90,7 +103,11 @@ export async function langchainMessageToGeminiMessage(
                 ? message.content.length > 0
                     ? [{ text: message.content }]
                     : []
-                : await processGeminiContentParts(plugin, message.content)
+                : await processGeminiContentParts(
+                      plugin,
+                      message.content,
+                      agentic
+                  )
 
         item.parts = [...getContextParts(thoughtData), ...parts]
 
@@ -176,17 +193,17 @@ function isContextPart(part: any): part is ChatPart {
 }
 
 function getContextParts(data: Record<string, any>, id?: string) {
-    const parts = data['parts'] ?? [data, ...Object.values(data)]
-    const raw = id != null ? data[id] : parts
+    const raw = id != null ? data[id] : [data, ...Object.values(data)]
     if (raw == null) return []
 
-    return (Array.isArray(raw) ? raw : [raw]).filter(isContextPart)
+    return (Array.isArray(raw) ? raw.flat() : [raw]).filter(isContextPart)
 }
 
 async function processFunctionMessage(
     plugin: ChatLunaPlugin<ClientConfig, Config>,
     message: AIMessage | ToolMessage,
-    removeId: boolean
+    removeId: boolean,
+    agentic: boolean
 ): Promise<ChatCompletionResponseMessage> {
     const thoughtData: Record<string, any> =
         message.additional_kwargs['thought_data'] ?? {}
@@ -194,11 +211,19 @@ async function processFunctionMessage(
     if (message['tool_calls']) {
         message = message as AIMessage
         const toolCalls = message.tool_calls
-        const parts: ChatPart[] = []
+        const parts: ChatPart[] = getContextParts(
+            Object.fromEntries(
+                Object.entries(thoughtData).filter(
+                    ([id]) => !toolCalls.some((call) => call.id === id)
+                )
+            )
+        )
 
         for (const toolCall of toolCalls) {
             // tool context: replay context tied to this tool call first.
-            parts.push(...getContextParts(thoughtData, toolCall.id))
+            if (toolCall.id != null) {
+                parts.push(...getContextParts(thoughtData, toolCall.id))
+            }
 
             const functionCall: ChatFunctionCallingPart['functionCall'] = {
                 name: toolCall.name,
@@ -228,6 +253,7 @@ async function processFunctionMessage(
     }
 
     const finalMessage = message as ToolMessage
+    const media: ChatPart[] = []
 
     const functionResponse: ChatFunctionResponsePart['functionResponse'] = {
         name: message.name,
@@ -250,10 +276,21 @@ async function processFunctionMessage(
                 (part) =>
                     isMessageContentImageUrl(part) ||
                     isGeminiFileLikeContent(part)
-            )
+            ),
+            agentic
         )
-        if (parts.length > 0) {
-            functionResponse.parts = parts
+        for (const part of parts) {
+            if (part['mediaProcessing'] || part['media_processing']) {
+                media.push(part)
+            } else if ('inlineData' in part) {
+                ;(functionResponse.parts ??= []).push({
+                    inlineData: part.inlineData
+                })
+            } else if ('inline_data' in part) {
+                ;(functionResponse.parts ??= []).push({
+                    inline_data: part.inline_data
+                })
+            }
         }
     } else {
         functionResponse.response = parseJsonArgs(message.content as string)
@@ -268,7 +305,8 @@ async function processFunctionMessage(
         parts: [
             {
                 functionResponse
-            }
+            },
+            ...media
         ]
     }
 }
@@ -324,29 +362,34 @@ function isGeminiFileLikeContent(
 function createGeminiInlineDataPart(
     plugin: ChatLunaPlugin<ClientConfig, Config>,
     data: string,
-    mimeType: string
+    mimeType: string,
+    agentic = false
 ) {
     if (plugin.config.useCamelCaseMediaFields) {
         return {
-            inlineData: { data, mimeType }
+            inlineData: { data, mimeType },
+            mediaProcessing: agentic ? ('AGENTIC' as const) : undefined
         }
     }
 
     return {
-        inline_data: { data, mime_type: mimeType }
+        inline_data: { data, mime_type: mimeType },
+        media_processing: agentic ? ('AGENTIC' as const) : undefined
     }
 }
 
 async function processGeminiFileLikeContent(
     plugin: ChatLunaPlugin<ClientConfig, Config>,
-    part: GeminiFileLikeContent
+    part: GeminiFileLikeContent,
+    agentic: boolean
 ) {
     try {
         const { buffer, mimeType } = await fetchFileLikeUrl(plugin, part)
         return createGeminiInlineDataPart(
             plugin,
             buffer.toString('base64'),
-            mimeType
+            mimeType,
+            agentic && mimeType.startsWith('video/')
         )
     } catch (e) {
         logger.warn(`Failed to fetch ${part.type}`, e)
@@ -356,8 +399,9 @@ async function processGeminiFileLikeContent(
 
 async function processGeminiContentParts(
     plugin: ChatLunaPlugin<ClientConfig, Config>,
-    content: MessageContentComplex[]
-) {
+    content: MessageContentComplex[],
+    agentic: boolean
+): Promise<ChatPart[]> {
     const mappedParts = await Promise.all(
         content.map(async (part) => {
             if (isMessageContentText(part)) {
@@ -367,9 +411,9 @@ async function processGeminiContentParts(
                 return await processGeminiImageContent(plugin, part)
             }
             if (isGeminiFileLikeContent(part)) {
-                return await processGeminiFileLikeContent(plugin, part)
+                return await processGeminiFileLikeContent(plugin, part, agentic)
             }
-            return part as any
+            return part as unknown as ChatPart
         })
     )
 

@@ -31,6 +31,7 @@ $inner:
       temperature: '回复的随机性程度，数值越高，回复越随机（范围：0~2）。'
       googleSearch: '为模型启用谷歌搜索。'
       imageGeneration: '为模型启用图像生成。目前仅支持 `gemini-*-image-*` 和 `gemini-2.5-flash-image-preview` 模型。'
+      agenticVideoUnderstanding: '为视频输入启用 Agentic 视频理解功能。开启后，模型会选择性、可分片地浏览视频的图像、音频信息，并可根据需要，增加高速片段的采样帧率。此功能旨在降低长视频的输入成本，并提升模型对于部分细节的理解能力。但此功能可能降低模型对于较短视频的全局理解能力，并增加响应延迟。目前仅支持 `gemini-3.5-flash-lite` `gemini-3.6-flash` `gemini-3.7-flash` `gemini-3.8-flash`。'
       thinkingBudget: '思考预算，范围：(-1~24576)，设置的数值越大，思考时花费的 Token 越多,-1 为动态思考。目前仅支持 gemini 2.5 系列模型。'
       groundingContentDisplay: '是否显示谷歌搜索结果。'
       imageModelSearch: '为图片生成模型启用搜索功能。开启后，支持搜索的图片模型将额外生成带 `-search` 后缀的变体（如 `gemini-3-pro-image-search`）。'
