@@ -182,13 +182,11 @@ function parseJsonArgs(args: string): Record<string, unknown> {
 }
 
 function isContextPart(part: any): part is ChatPart {
+    // Gemini rejects replayed Agentic media tool steps.
     return (
         typeof part === 'object' &&
         part != null &&
-        (part['toolCall'] != null ||
-            part['toolResponse'] != null ||
-            part['executableCode'] != null ||
-            part['codeExecutionResult'] != null)
+        (part['executableCode'] != null || part['codeExecutionResult'] != null)
     )
 }
 

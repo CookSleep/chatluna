@@ -602,9 +602,9 @@ export class GeminiRequester
                 if (
                     updatedContent ||
                     updatedToolCalling ||
-                    chunk['thoughtSignature'] != null ||
-                    chunk['toolCall'] != null ||
-                    chunk['toolResponse'] != null ||
+                    (chunk['thoughtSignature'] != null &&
+                        chunk['toolCall'] == null &&
+                        chunk['toolResponse'] == null) ||
                     chunk['executableCode'] != null ||
                     chunk['codeExecutionResult'] != null
                 ) {
@@ -773,13 +773,15 @@ export class GeminiRequester
         const sig = chunk['thoughtSignature']
         let thoughtData: Record<string, unknown> | undefined
         if (
-            chunk['toolCall'] != null ||
-            chunk['toolResponse'] != null ||
             chunk['executableCode'] != null ||
             chunk['codeExecutionResult'] != null
         ) {
             thoughtData = { parts: [chunk] }
-        } else if (sig != null) {
+        } else if (
+            sig != null &&
+            chunk['toolCall'] == null &&
+            chunk['toolResponse'] == null
+        ) {
             const id = functionCall?.id ?? chunk['functionCall']?.id
             if (id != null) {
                 thoughtData = {
