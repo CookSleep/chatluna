@@ -631,22 +631,10 @@ export class GeminiRequester
                 }
 
                 if (content || call || thought) {
-                    const image =
-                        this.ctx.chatluna_storage == null &&
-                        'inlineData' in chunk
-                            ? chunk.inlineData
-                            : undefined
                     const msg = new AIMessageChunk({
                         content: content ?? '',
                         tool_call_chunks: call ? [call] : [],
-                        additional_kwargs: {
-                            images: image
-                                ? [
-                                      `data:${image.mimeType ?? 'image/png'};base64,${image.data}`
-                                  ]
-                                : undefined,
-                            thought_data: thought
-                        }
+                        additional_kwargs: { thought_data: thought }
                     })
                     yield {
                         type: 'generation',

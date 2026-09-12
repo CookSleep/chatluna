@@ -137,9 +137,15 @@ export async function langchainMessageToGeminiMessage(
         }
 
         if ((msg as AIMessage).tool_calls?.length > 0) {
+            const text =
+                typeof msg.content === 'string'
+                    ? msg.content.length > 0
+                        ? [{ text: msg.content }]
+                        : []
+                    : await convert(msg.content)
             result.push({
                 role: 'model',
-                parts: convertCalls(msg as AIMessage)
+                parts: [...text, ...convertCalls(msg as AIMessage)]
             })
             continue
         }
